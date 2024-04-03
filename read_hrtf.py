@@ -48,8 +48,42 @@ import pickle
 # hrtf_data = {...}
 
 # # Saving the dictionary to a file
-with open('hrtf_data.pkl', 'rb') as file:
+
+import os
+from scipy.io import wavfile
+
+# Path to your 'elev-10' folder
+folder_path = 'elev-10'
+
+# Dictionary to store the azimuth angle as key and HRTF data as value
+hrtf_data = {}
+
+
+with open('./client/hrtf_data.pkl', 'rb') as file:
+    # Load the hrtf data from the file
     hrtf_data_loaded = pickle.load(file)
+print(hrtf_data_loaded[35].shape)
+# List all files in the folder
+# for filename in os.listdir(folder_path):
+#     if filename.endswith('.wav'):
+#         # Extract the azimuth angle from the filename
+#         # Assuming the format is 'H-10eXXXa.wav' where XXX is the angle
+#         angle = int(filename.split('e')[1][:3])
+        
+#         # Read the HRTF data from the WAV file
+#         filepath = os.path.join(folder_path, filename)
+#         _, data = wavfile.read(filepath)
+        
+#         # Add the angle and data to the dictionary
+#         hrtf_data[angle+180] = data
+
+# hrtf_data_loaded.update(hrtf_data)
+
+# with open('hrtf_data.pkl', 'wb') as handle:
+#     pickle.dump(hrtf_data_loaded, handle, protocol=pickle.HIGHEST_PROTOCOL)
+# # Now hrtf_data dictionary has the azimuth angle as keys and HRTF data as values
+
+
 # print(hrtf_data_loaded)
 
 

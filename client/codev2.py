@@ -6,13 +6,26 @@ import threading
 import math
 import logging
 import time
+import numpy as np
+import pickle
+from scipy.signal import fftconvolve
+import soundfile as sf
+
 # Initialize Pygame
 pygame.init()
 
 # Screen dimensions
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+chunk = 1024
 
+audio_path='C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\\client\\public\\water.wav'
+p = pyaudio.PyAudio()
+
+with open('hrtf_data.pkl', 'rb') as file:
+    # Load the hrtf data from the file
+    hrtf_data_loaded = pickle.load(file)
+print(hrtf_data_loaded.keys())
 # Colors and settings
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -30,98 +43,125 @@ avatar_speaker = pygame.transform.scale(avatar_speaker, (50, 50))
 user_pos = [SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2]
 speaker_pos = [SCREEN_WIDTH // 3, SCREEN_HEIGHT // 3]
 
-# Audio playback flag and lock
-logging.basicConfig(level=logging.DEBUG)
-
-audio_lock = threading.Lock()
-audio_thread = None
-stop_audio_event = threading.Event()
+# Function to play audio
+should_play_audio = False
 audio_playing = False
 
+def calculate_distance_and_angle(user_pos, speaker_pos):
+    dx = speaker_pos[0] - user_pos[0]
+    dy = speaker_pos[1] - user_pos[1]
+    distance = math.sqrt(dx**2 + dy**2)
+    # Calculate angle from the avatar's perspective
+    actual_angle = math.degrees(math.atan2(dy, dx))
+    
+    # Normalize the angle to be between 0 and 360 degrees
+    actual_angle = actual_angle % 360
+
+    # Find the closest available angle in the HRTF data
+    rounded_angle = 5 * round(actual_angle / 5)
+    closest_angle = rounded_angle if rounded_angle in hrtf_data_loaded else min(hrtf_data_loaded.keys(), key=lambda k: abs(k - rounded_angle))
+    
+    return distance, actual_angle, closest_angle
+
+# Audio playback function
+
+def apply_volume_attenuation(data, volume):
+    """Apply volume attenuation to audio frames."""
+    # Convert byte data to numpy array
+    audio_samples = np.frombuffer(data, dtype=np.int16)
+    # Apply volume factor
+    attenuated_samples = (audio_samples * volume).astype(np.int16)
+    # Convert back to bytes
+    return attenuated_samples.tobytes()
+
+def apply_hrtf(audio_data, hrtf_filter):
+    print(audio_data.shape)
+    # Apply HRTF filter separately to each channel
+    processed_audio_left = fftconvolve(audio_data[:, 0], hrtf_filter[:, 0], mode='same')
+    processed_audio_right = fftconvolve(audio_data[:, 1], hrtf_filter[:, 1], mode='same')
+    curr=np.stack((processed_audio_left, processed_audio_right), axis=-1)
+    print("curr.shape", curr.shape)
+    return np.stack((processed_audio_left, processed_audio_right), axis=-1)
+
 def play_audio():
+    global audio_playing, hrtf_data_loaded, user_pos, speaker_pos
+
+
+    # Load the audio file
+    data, samplerate = sf.read(audio_file)
+    p = pyaudio.PyAudio()
+    stream = p.open(format=pyaudio.paInt16,
+                    channels=2,
+                    rate=samplerate,
+                    output=True)
+
+    chunk_size = 1024  # Define your chunk size
+    num_chunks = len(data) // chunk_size
+    for i in range(num_chunks + 1):
+        if not audio_playing:
+            break
+
+        chunk_start = i * chunk_size
+        chunk_end = chunk_start + chunk_size
+        audio_chunk = data[chunk_start:chunk_end]
+
+        if is_user_in_range():
+            _, _, closest_angle_key = calculate_distance_and_angle(user_pos, speaker_pos)
+            hrtf_filter = hrtf_data_loaded[closest_angle_key]
+            processed_chunk = apply_hrtf(audio_chunk, hrtf_filter)
+            stream.write(processed_chunk.astype(np.int16).tobytes())
+        else:
+            # Write silence if out of range
+            silence = np.zeros((chunk_size, 2), dtype=np.int16)
+            stream.write(silence.tobytes())
+
+    # Cleanup
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+audio_playing = False
+
+# Define a thread for audio playback to be controlled
+audio_thread = None
+
+def start_audio():
+    global audio_playing, audio_thread
+    if not audio_playing:
+        audio_playing = True
+        # Pass current user and speaker positions to the audio playback thread
+        audio_thread = threading.Thread(target=play_audio,)
+        audio_thread.start()
+
+def stop_audio():
     global audio_playing
-    try:
-        wf = wave.open(audio_file, 'rb')
-        p = pyaudio.PyAudio()
-        stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                        channels=wf.getnchannels(),
-                        rate=wf.getframerate(),
-                        output=True)
+    audio_playing = False
+    # Optionally, wait for the thread to finish if you need a clean stop
+    if audio_thread is not None:
+        audio_thread.join()
+range_radius=150
+# Function to check if the user is in the range of the speaker
+def is_user_in_range():
+    distance = math.sqrt((user_pos[0] - speaker_pos[0])**2 + (user_pos[1] - speaker_pos[1])**2)
+    return distance <= range_radius
 
-        data = wf.readframes(1024)
-        while data and not stop_audio_event.is_set():
-            stream.write(data)
-            data = wf.readframes(1024)
-
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-    except Exception as e:
-        logging.error(f"Exception in play_audio: {e}")
-    finally:
-        with audio_lock:
-            audio_playing = False
-            logging.debug("Audio playback thread ended.")
-
-last_toggle_time = 0
-TOGGLE_DEBOUNCE = 0.5  # Debounce time in seconds
-
-def significant_state_change(current_state, new_state):
-    """Check if there's a significant change in state that warrants a toggle."""
-    return current_state != new_state
-
-def can_toggle():
-    """Check if enough time has passed since the last toggle."""
-    global last_toggle_time
-    current_time = time.time()
-    if current_time - last_toggle_time > TOGGLE_DEBOUNCE:
-        last_toggle_time = current_time
-        return True
-    return False
-
-
-def toggle_audio(user_pos, speaker_pos):
-    global audio_playing, audio_thread, stop_audio_event
-    distance = math.sqrt((user_pos[0] - speaker_pos[0]) ** 2 + (user_pos[1] - speaker_pos[1]) ** 2)
-    within_range = distance <= RANGE_RADIUS
-    should_play = within_range and not audio_playing
-    should_stop = not within_range and audio_playing
-
-    try:
-        if significant_state_change(audio_playing, within_range) and can_toggle():
-            with audio_lock:
-                if should_play:
-                    # Start audio logic
-                    if audio_thread is not None and audio_thread.is_alive():
-                        stop_audio_event.set()
-                        audio_thread.join()  # Ensure previous thread is stopped
-                    stop_audio_event.clear()
-                    audio_thread = threading.Thread(target=play_audio)
-                    audio_thread.start()
-                    audio_playing = True
-                    logging.debug("Audio started")
-                elif should_stop:
-                    # Stop audio logic
-                    stop_audio_event.set()
-                    if audio_thread is not None:
-                        audio_thread.join()
-                    audio_playing = False
-                    logging.debug("Audio stopped")
-    except Exception as e:
-        logging.error(f"Error in toggle_audio: {e}")
 # Main game loop
 running = True
+audio_playing=False
 in_range_last_frame = False  # Track whether the avatar was in range in the last frame
+audio_thread = None
 
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_x:
-            # Toggle audio based on explicit user action within range
-            distance = math.sqrt((user_pos[0] - speaker_pos[0])**2 + (user_pos[1] - speaker_pos[1])**2)
-            if distance <= RANGE_RADIUS:
-                toggle_audio(user_pos, speaker_pos)
+
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_x:
+                if audio_playing:
+                    stop_audio()
+                else:
+                    if is_user_in_range():
+                        start_audio()
 
     # Movement keys
     keys = pygame.key.get_pressed()
@@ -137,7 +177,8 @@ while running:
     # Calculate current distance and check range
     distance = math.sqrt((user_pos[0] - speaker_pos[0])**2 + (user_pos[1] - speaker_pos[1])**2)
     in_range_this_frame = distance <= RANGE_RADIUS
-
+    distance, angle, closest_angle = calculate_distance_and_angle(user_pos, speaker_pos)
+    print(f"Distance: {distance:.2f}, Angle: {angle:.2f} degrees, Closest HRTF: ", {closest_angle})
     # Drawing
     screen.blit(background_image, (0, 0))
     screen.blit(avatar_user, user_pos)
@@ -146,12 +187,15 @@ while running:
     pygame.draw.circle(screen, RED, speaker_pos, RANGE_RADIUS, 1)
 
     # Toggle audio off if moving out of range, only if the state changed since the last frame
-    if in_range_this_frame != in_range_last_frame:
-        toggle_audio(user_pos, speaker_pos)
-    in_range_last_frame = in_range_this_frame  # Update the range state for the next frame
+    # if in_range_this_frame != in_range_last_frame:
+    #     toggle_audio(user_pos, speaker_pos)
+    # in_range_last_frame = in_range_this_frame  # Update the range state for the next frame
 
     # Update the display
+    # toggle_audio(user_pos, speaker_pos)
     pygame.display.flip()
     pygame.time.Clock().tick(60)
 
+audio_thread.join()
 pygame.quit()
+sys.exit()

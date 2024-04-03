@@ -27,7 +27,6 @@ def play(sound_path, hrtf_folder_right, hrtf_folder_left):
     sound, fs = sf.read(sound_path)
     if sound.ndim == 1:
         sound = np.tile(sound, (2, 1)).T
-
     hrtf_files_right = [file for file in os.listdir(hrtf_folder_right) if file.endswith('.wav')]
     hrtf_files_left = [file for file in os.listdir(hrtf_folder_left) if file.endswith('.wav')]
 
@@ -39,7 +38,6 @@ def play(sound_path, hrtf_folder_right, hrtf_folder_left):
     chunk_size = len(sound) // total_hrtf_files
 
     combined_audio = []
-
     # Process right channel HRTF files (0 to 180 degrees)
     for i, hrtf_file in enumerate(hrtf_files_sorted_right):
         hrtf_path = os.path.join(hrtf_folder_right, hrtf_file)
@@ -48,11 +46,10 @@ def play(sound_path, hrtf_folder_right, hrtf_folder_left):
         chunk_start = i * chunk_size
         chunk_end = (i + 1) * chunk_size
         current_chunk = sound[chunk_start:chunk_end]
-
         # Apply HRTF only to the right channel
         convolved_chunk = current_chunk.copy()
         convolved_chunk[:, 1] = fftconvolve(current_chunk[:, 1], hrtf[:, 1], mode='same')
-
+        # print("convolved_chunk.shape ", convolved_chunk.shape)
         combined_audio.append(convolved_chunk)
 
     # Process left channel HRTF files (180 to 0 degrees)
@@ -67,6 +64,7 @@ def play(sound_path, hrtf_folder_right, hrtf_folder_left):
         # Apply HRTF only to the left channel
         convolved_chunk = current_chunk.copy()
         convolved_chunk[:, 0] = fftconvolve(current_chunk[:, 0], hrtf[:, 0], mode='same')
+        print(convolved_chunk.shape)
 
         combined_audio.append(convolved_chunk)
 
@@ -78,5 +76,5 @@ def play(sound_path, hrtf_folder_right, hrtf_folder_left):
 
 
 # Example usage
-output_file = play('water.wav', 'compact/elev10', 'compact/elev-10')
+output_file = play('water.wav', 'elev10', 'elev-10')
 print(f"Audio saved to: {output_file}")
