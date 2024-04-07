@@ -1,19 +1,27 @@
-import asyncio
-from aiortc import RTCPeerConnection, RTCSessionDescription
-import websockets
-import json
+from aiohttp import web
+import rooms
 
-async def connect_to_signaling_server(uri):
-    async with websockets.connect(uri) as websocket:
-        # Example: Sending an offer to the signaling server
-        offer = {"sdp": "offer_sdp_here", "type": "offer"}
-        await websocket.send(json.dumps(offer))
+routes = web.RouteTableDef()
 
-        # Wait for an answer from the signaling server
-        answer = await websocket.recv()
-        print("Received answer:", answer)
+@routes.post('/join')
+async def join_room(request):
+    data = await request.json()
+    room_id = data['room_id']
+    user_id = data['user_id']
+    offer = data['offer']
+    answer = await rooms.join_room(room_id, user_id, offer)
+    return web.json_response(answer)
 
-async def main():
-    await connect_to_signaling_server('ws://localhost:8080/ws')
+@routes.post('/leave')
+async def leave_room(request):
+    data = await request.json()
+    room_id = data['room_id']
+    user_id = data['user_id']
+    rooms.leave_room(room_id, user_id)
+    return web.json_response({"message": "User left the room."})
 
-asyncio.run(main())
+app = web.Application()
+app.add_routes(routes)
+
+if __name__ == '__main__':
+    web.run_app(app, port=8080)

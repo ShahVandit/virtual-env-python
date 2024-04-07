@@ -25,15 +25,14 @@ class AvatarSelectionScreen:
 
     def load_avatars(self):
         # Load avatar images and define their positions
-        avatars_dir="C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\\client\\public\\avatars"
+        avatars_dir="assets\\images\\avatars"
         avatar_files = [f for f in os.listdir(avatars_dir) if f.endswith('.png')]
         avatar_spacing = 100  # Space between avatars
         total_width = (len(avatar_files) - 1) * avatar_spacing
         start_x = (SCREEN_WIDTH - total_width) // 2
-        avatars_dir='C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\\client\\public\\avatars'
         avatar_files = [f for f in os.listdir(avatars_dir) if f.endswith('.png')]
         # Load avatar images and define their positions
-        avatar_names = ['doux_preview', 'mort_preview']
+        # avatar_names = ['doux_preview', 'mort_preview']
         for idx, file in enumerate(avatar_files):
             image_path = os.path.join(avatars_dir, file)
             image = pygame.image.load(image_path)
@@ -95,28 +94,12 @@ class AvatarSelectionScreen:
         # Update logic for avatar selection could go here
         pass
 
-    # def draw(self):
-    #     # Clear the screen
-    #     self.screen.fill((255, 255, 255))  # Clear screen
-    #     # Draw the room name centered at the top
-    #     room_text_surf = self.font.render(f"Room Name: {self.room_name}", True, (0, 0, 0))
-    #     room_text_rect = room_text_surf.get_rect(center=(SCREEN_WIDTH // 2, 50))
-    #     self.screen.blit(room_text_surf, room_text_rect)
-
-    #     # Draw avatars centered on the screen
-    #     for img, rect, _ in self.avatars:
-    #         self.screen.blit(img, rect)
-
-    #     # Draw the username input box centered below the avatars
-    #     pygame.draw.rect(self.screen, self.color, self.username_input_box, 2)
-    #     username_surf = self.font.render(self.username, True, (0, 0, 0))
-    #     self.screen.blit(username_surf, (self.username_input_box.x + 5, self.username_input_box.y + 5))
-
-    #     # Highlight selected avatar
-    #     if self.selected_avatar_index is not None:
-    #         selected_avatar = self.avatars[self.selected_avatar_index]
-    #         pygame.draw.rect(self.screen, (0, 255, 0), selected_avatar[1], 2)  # Draw a green rectangle around the selected avatar
-
+    def get_selected_avatar_image(self):
+        # Return the image of the selected avatar
+        if self.selected_avatar_index is not None:
+            return self.avatars[self.selected_avatar_index][0]  # The first element of the tuple is the image
+        else:
+            return None  # No avatar was selected
     def is_done(self):
         return self.done
 
