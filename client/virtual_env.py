@@ -10,7 +10,7 @@ import numpy as np
 import pickle
 from scipy.signal import fftconvolve
 import soundfile as sf
-from room_entry import RoomEntryScreen
+from screens.room_entry import RoomEntryScreen
 
 # Initialize Pygame
 pygame.init()
@@ -36,10 +36,10 @@ RED = (255, 0, 0)
 RANGE_RADIUS = 100
 
 # Background and avatars
-avatar_user = pygame.image.load('C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\client\\public\\doux_preview.png')
-audio_file = 'C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\client\\public\\water.wav'
-avatar_speaker = pygame.image.load('C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\client\\public\\boombox.png')
-background_image = pygame.image.load('C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\client\\public\\map.png')
+avatar_user = pygame.image.load('C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\\client\\assets\\images\\avatars\\doux_preview.png')
+audio_file = 'C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\\client\\assets\\audio\\water.wav'
+avatar_speaker = pygame.image.load('C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\\client\\assets\\images\\speaker\\boombox.png')
+background_image = pygame.image.load('C:\\Users\\Vandit\\Desktop\\college\\3d\\project\\virtual-env-python\\virtual-env-python\\client\\assets\\images\\background\\map.png')
 avatar_user = pygame.transform.scale(avatar_user, (50, 50))
 avatar_speaker = pygame.transform.scale(avatar_speaker, (50, 50))
 
@@ -82,14 +82,18 @@ def apply_volume_attenuation(audio_data, volume_factor):
     # Apply volume attenuation to both channels
     return audio_data * volume_factor
 
-def apply_hrtf(audio_data, hrtf_filter, volume_factor):
-    # Apply HRTF filter separately to each channel
-    processed_audio_left = fftconvolve(audio_data[:, 0], hrtf_filter[:, 0], mode='same')
-    processed_audio_right = fftconvolve(audio_data[:, 1], hrtf_filter[:, 1], mode='same')
-    
-    # Combine the channels back into stereo audio data
+def apply_hrtf(audio_data, hrtf_filter, volume_factor, angle):
+    if angle > 180:
+    # Apply HRTF filter but switch channels for angles greater than 180
+        processed_audio_left = fftconvolve(audio_data[:, 0], hrtf_filter[:, 1], mode='same')
+        processed_audio_right = fftconvolve(audio_data[:, 1], hrtf_filter[:, 0], mode='same')
+    else:
+        # Apply HRTF filter normally for angles 180 or less
+        processed_audio_left = fftconvolve(audio_data[:, 0], hrtf_filter[:, 0], mode='same')
+        processed_audio_right = fftconvolve(audio_data[:, 1], hrtf_filter[:, 1], mode='same')
+
+# Combine the channels back into stereo audio data
     processed_audio = np.stack((processed_audio_left, processed_audio_right), axis=-1)
-    
     # Apply volume attenuation
     processed_audio = apply_volume_attenuation(processed_audio, volume_factor)
     
@@ -106,6 +110,7 @@ def play_audio():
                     rate=samplerate,
                     output=True)
 
+
     chunk_size = 1024  # Define your chunk size
     num_chunks = len(data) // chunk_size
     for i in range(num_chunks + 1):
@@ -117,14 +122,14 @@ def play_audio():
         audio_chunk = data[chunk_start:chunk_end]
 
         if is_user_in_range():
-            distance, _, closest_angle_key = calculate_distance_and_angle(user_pos, speaker_pos)
+            distance, angle, closest_angle_key = calculate_distance_and_angle(user_pos, speaker_pos)
             hrtf_filter = hrtf_data_loaded[closest_angle_key]
             
             # Calculate volume attenuation factor based on distance
             # Example simple linear attenuation, adjust according to your needs
             volume_factor = max(1 - (distance / 200), 0)  # Adjust the denominator as needed
             
-            processed_chunk = apply_hrtf(audio_chunk, hrtf_filter, volume_factor)
+            processed_chunk = apply_hrtf(audio_chunk, hrtf_filter, volume_factor, angle)
             stream.write(processed_chunk.astype(np.int16).tobytes())
         else:
             # Write silence if out of range

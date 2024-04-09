@@ -3,16 +3,17 @@ import pygame
 import os
 SCREEN_WIDTH,SCREEN_HEIGHT=800, 600
 class AvatarSelectionScreen:
-    def __init__(self, screen, room_name):
+    def __init__(self, screen, room_name, session_id):
         self.screen = screen
         self.room_name = room_name
         self.font = pygame.font.Font(None, 36)
-        self.username = ''
         self.done = False
         self.active = False
-        self.avatars = []  # Will hold tuples of (Surface, Rect, name)
+        self.avatars = []
         self.selected_avatar_index = None
-        self.username_input_box = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 150, 200, 50)
+        self.user_name=""
+        self.session_id=session_id
+        self.user_name_input_box = pygame.Rect(SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 150, 200, 50)
         self.color_inactive = pygame.Color('lightskyblue3')
         self.color_active = pygame.Color('dodgerblue2')
         self.color_button = pygame.Color('purple')
@@ -46,8 +47,8 @@ class AvatarSelectionScreen:
                     if avatar_rect.collidepoint(event.pos):
                         self.selected_avatar_index = idx
 
-                # Check if the username input box was clicked
-                if self.username_input_box.collidepoint(event.pos):
+                # Check if the user_name input box was clicked
+                if self.user_name_input_box.collidepoint(event.pos):
                     self.active = True
                 else:
                     self.active = False
@@ -55,15 +56,15 @@ class AvatarSelectionScreen:
             if event.type == pygame.KEYDOWN:
                 if self.active:
                     if event.key == pygame.K_RETURN:
-                        if self.selected_avatar_index is not None and self.username:
+                        if self.selected_avatar_index is not None and self.user_name:
                             self.done = True  # Proceed to the virtual environment
                     elif event.key == pygame.K_BACKSPACE:
-                        self.username = self.username[:-1]
+                        self.user_name = self.user_name[:-1]
                     else:
-                        self.username += event.unicode
+                        self.user_name += event.unicode
             if event.type == pygame.MOUSEBUTTONDOWN:
             # Check if the "Enter Room" button was clicked
-                if self.enter_button.collidepoint(event.pos) and self.selected_avatar_index is not None and self.username:
+                if self.enter_button.collidepoint(event.pos) and self.selected_avatar_index is not None and self.user_name:
                     self.done = True  # Proceed to the virtual environment
 
     def draw(self):
@@ -81,11 +82,11 @@ class AvatarSelectionScreen:
                 # Draw a rectangle around the selected avatar
                 pygame.draw.rect(self.screen, (0, 255, 0), avatar_rect, 2)
 
-        # Draw the username input box
+        # Draw the user_name input box
         input_box_color = self.color_active if self.active else self.color_inactive
-        pygame.draw.rect(self.screen, input_box_color, self.username_input_box, 2)
-        username_surf = self.font.render(self.username, True, (0, 0, 0))
-        self.screen.blit(username_surf, (self.username_input_box.x + 5, self.username_input_box.y + 5))        
+        pygame.draw.rect(self.screen, input_box_color, self.user_name_input_box, 2)
+        user_name_surf = self.font.render(self.user_name, True, (0, 0, 0))
+        self.screen.blit(user_name_surf, (self.user_name_input_box.x + 5, self.user_name_input_box.y + 5))        
         pygame.draw.rect(self.screen, (100, 100, 255), self.enter_button)
         enter_text_surface = self.button_font.render(self.button_text, True, (255, 255, 255))
         enter_text_rect = enter_text_surface.get_rect(center=self.enter_button.center)
@@ -93,18 +94,23 @@ class AvatarSelectionScreen:
     def update(self):
         # Update logic for avatar selection could go here
         pass
-
-    def get_selected_avatar_image(self):
-        # Return the image of the selected avatar
-        if self.selected_avatar_index is not None:
-            return self.avatars[self.selected_avatar_index][0]  # The first element of the tuple is the image
-        else:
-            return None  # No avatar was selected
+    def get_session_id(self):
+        return self.session_id
+    def get_selected_image(self):
+        """Return the path of the selected avatar."""
+        if self.selected_avatar_index is not None and self.selected_avatar_index < len(self.avatars):
+            return self.avatars[self.selected_avatar_index][2]  # Return the path
+        return None
+    def get_room_name(self):
+        return self.room_name
     def is_done(self):
         return self.done
 
-    def get_selected_avatar(self):
-        return self.selected_avatar
+    def select_avatar(self, avatar_id):
+        """Select an avatar by its ID."""
+        if avatar_id in self.avatars:
+            self.selected_avatar_id = avatar_id
 
-    def get_username(self):
-        return self.username
+
+    def get_user_name(self):
+        return self.user_name

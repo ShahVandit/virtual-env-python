@@ -1,6 +1,6 @@
 # vir_env.py
 import pygame
-import pygame
+import os
 import sys
 import pyaudio
 import wave
@@ -12,6 +12,9 @@ import numpy as np
 import pickle
 from scipy.signal import fftconvolve
 import soundfile as sf
+pygame.init()
+
+# Now it's safe to create the display window
 SCREEN_WIDTH,SCREEN_HEIGHT=800, 600
 should_play_audio = False
 audio_playing = False
@@ -20,24 +23,31 @@ with open('hrtf_data.pkl', 'rb') as file:
     hrtf_data_loaded = pickle.load(file)
 
 class VirEnvScreen:
-    def __init__(self, screen, room_name, avatar_image, username, background_image, speaker_image):
+    def __init__(self, screen, room_name, avatar_image, username):
         self.screen = screen
-        self.moving_left = False
-        self.moving_right = False
-        self.moving_up = False
-        self.moving_down = False
         self.room_name = room_name
-        self.avatar_image = avatar_image  # Assuming this is a Surface object
         self.username = username
-        self.background_image = background_image  # This should be a Surface object
-        self.speaker_image = speaker_image  # This should also be a Surface object
+        # Update paths to use os.path.join for better compatibility
+        self.background_image_path = os.path.join('assets', 'images', 'background', 'map.png')
+        self.speaker_image_path = os.path.join('assets', 'images', 'speaker', 'boombox.png')
+        self.avatar_image_path = os.path.join('assets', 'images', 'avatars', avatar_image + '.png')
+        
+        self.moving_down=False
+        self.moving_left=False
+        self.moving_right=False
+        self.moving_up=False
+
+        # Load images
+        self.background_image = pygame.image.load(self.background_image_path).convert()
+        self.speaker_image = pygame.image.load(self.speaker_image_path).convert_alpha()
+        self.avatar_image = pygame.image.load(self.avatar_image_path).convert_alpha()
+
         self.font = pygame.font.Font(None, 36)
-        self.user_pos = [self.screen.get_width() // 2, self.screen.get_height() // 2]
-        self.speaker_pos = [self.screen.get_width() // 3, self.screen.get_height() // 3]
-        self.range_radius = 150
+        self.user_pos = [screen.get_width() // 2, screen.get_height() // 2]
+        self.speaker_pos = [screen.get_width() // 3, screen.get_height() // 3]
+        
         self.audio_playing = False
-        self.audio_thread = None
-        # Assume hrtf_data_loaded is available
+        self.audio_thread = None        # Assume hrtf_data_loaded is available
         # You might need to pass it as a parameter if it's used in methods like play_audio
     def handle_event(self, event):
         # Handling KEYDOWN events to start movement
@@ -81,26 +91,27 @@ class VirEnvScreen:
         # Update anything that needs refreshing
         pass
     def draw(self):
-        # Draw the virtual environment
-        self.screen.blit(self.background_image, (0, 0))  # Draw background
+        # Draw the virtual environment background
+        self.screen.blit(self.background_image, (0, 0))
 
         # Draw the room name at the top
         room_name_surf = self.font.render(f"Room: {self.room_name}", True, pygame.Color('black'))
-        room_name_rect = room_name_surf.get_rect(center=(SCREEN_WIDTH // 2, 20))
+        room_name_rect = room_name_surf.get_rect(center=(self.screen.get_width() // 2, 20))
         self.screen.blit(room_name_surf, room_name_rect)
 
         # Draw the speaker
-        speaker_rect = self.speaker_image.get_rect(center=(self.speaker_pos[0], self.speaker_pos[1]))
+        speaker_rect = self.speaker_image.get_rect(center=self.speaker_pos)
         self.screen.blit(self.speaker_image, speaker_rect)
 
         # Draw the avatar
-        avatar_rect = self.avatar_image.get_rect(center=(self.user_pos[0], self.user_pos[1]))
+        avatar_rect = self.avatar_image.get_rect(center=self.user_pos)
         self.screen.blit(self.avatar_image, avatar_rect)
 
         # Draw the username above the avatar
         username_surf = self.font.render(self.username, True, pygame.Color('black'))
         username_rect = username_surf.get_rect(center=(avatar_rect.centerx, avatar_rect.top - 20))
         self.screen.blit(username_surf, username_rect)
+        
     def start_audio(self):
         global audio_playing, audio_thread
         if not audio_playing:
@@ -119,6 +130,7 @@ class VirEnvScreen:
         range_radius=150
         distance = math.sqrt((self.user_pos[0] - self.speaker_pos[0])**2 + (self.user_pos[1] - self.speaker_pos[1])**2)
         return distance <= range_radius
+    
     def calculate_distance_and_angle(self, user_pos, speaker_pos):
         dx = self.speaker_pos[0] - self.user_pos[0]
         dy = self.speaker_pos[1] - self.user_pos[1]
@@ -134,21 +146,26 @@ class VirEnvScreen:
         closest_angle = rounded_angle if rounded_angle in hrtf_data_loaded else min(hrtf_data_loaded.keys(), key=lambda k: abs(k - rounded_angle))
         
         return distance, actual_angle, closest_angle
-    def apply_hrtf(self,audio_data, hrtf_filter, volume_factor):
-        # Apply HRTF filter separately to each channel
-        processed_audio_left = fftconvolve(audio_data[:, 0], hrtf_filter[:, 0], mode='same')
-        processed_audio_right = fftconvolve(audio_data[:, 1], hrtf_filter[:, 1], mode='same')
         
-        # Combine the channels back into stereo audio data
-        processed_audio = np.stack((processed_audio_left, processed_audio_right), axis=-1)
-        
-        # Apply volume attenuation
-        processed_audio = self.apply_volume_attenuation(processed_audio, volume_factor)
-        
-        return processed_audio
     def apply_volume_attenuation(self, audio_data, volume_factor):
     # Apply volume attenuation to both channels
         return audio_data * volume_factor
+    def apply_hrtf(self,audio_data, hrtf_filter, volume_factor, angle):
+        if angle > 180:
+        # Apply HRTF filter but switch channels for angles greater than 180
+            processed_audio_left = fftconvolve(audio_data[:, 0], hrtf_filter[:, 1], mode='same')
+            processed_audio_right = fftconvolve(audio_data[:, 1], hrtf_filter[:, 0], mode='same')
+        else:
+            # Apply HRTF filter normally for angles 180 or less
+            processed_audio_left = fftconvolve(audio_data[:, 0], hrtf_filter[:, 0], mode='same')
+            processed_audio_right = fftconvolve(audio_data[:, 1], hrtf_filter[:, 1], mode='same')
+
+    # Combine the channels back into stereo audio data
+        processed_audio = np.stack((processed_audio_left, processed_audio_right), axis=-1)
+        # Apply volume attenuation
+        return self.apply_volume_attenuation(processed_audio, volume_factor)
+    
+        return processed_audio    
     def play_audio(self):
         global audio_playing, hrtf_data_loaded, user_pos, speaker_pos
         audio_file="assets\\audio\\water.wav"
@@ -171,14 +188,15 @@ class VirEnvScreen:
             audio_chunk = data[chunk_start:chunk_end]
 
             if self.is_user_in_range():
-                distance, _, closest_angle_key = self.calculate_distance_and_angle(self.user_pos, self.speaker_pos)
+                distance, angle, closest_angle_key = self.calculate_distance_and_angle(self.user_pos, self.speaker_pos)
+                print(distance, angle, closest_angle_key)
                 hrtf_filter = hrtf_data_loaded[closest_angle_key]
                 
                 # Calculate volume attenuation factor based on distance
                 # Example simple linear attenuation, adjust according to your needs
                 volume_factor = max(1 - (distance / 200), 0)  # Adjust the denominator as needed
                 
-                processed_chunk = self.apply_hrtf(audio_chunk, hrtf_filter, volume_factor)
+                processed_chunk = self.apply_hrtf(audio_chunk, hrtf_filter, volume_factor, angle)
                 stream.write(processed_chunk.astype(np.int16).tobytes())
             else:
                 # Write silence if out of range
