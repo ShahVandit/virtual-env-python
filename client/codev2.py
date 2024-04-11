@@ -24,7 +24,7 @@ running = True
 # Join room
 async def join_room_async(room_name):
     async with aiohttp.ClientSession() as session:
-        url = 'http://127.0.0.1:5000/join_room'  # Adjust as needed
+        url = 'http://127.0.0.1:8080/join_room'  # Adjust as needed
         data = {'room_name': room_name}
         async with session.post(url, json=data) as resp:
             response = await resp.json()

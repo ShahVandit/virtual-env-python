@@ -81,13 +81,13 @@ class VirEnvScreen:
 
     def update(self):
         if self.moving_left:
-            self.user_pos[0] -= 3
+            self.user_pos[0] -= 0.6
         if self.moving_right:
-            self.user_pos[0] += 3
+            self.user_pos[0] += 0.6
         if self.moving_up:
-            self.user_pos[1] -= 3
+            self.user_pos[1] -= 0.6
         if self.moving_down:
-            self.user_pos[1] += 3
+            self.user_pos[1] += 0.6
         # Update anything that needs refreshing
         pass
     def draw(self):
@@ -165,7 +165,6 @@ class VirEnvScreen:
         # Apply volume attenuation
         return self.apply_volume_attenuation(processed_audio, volume_factor)
     
-        return processed_audio    
     def play_audio(self):
         global audio_playing, hrtf_data_loaded, user_pos, speaker_pos
         audio_file="assets\\audio\\water.wav"
