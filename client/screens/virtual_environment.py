@@ -23,11 +23,11 @@ with open('hrtf_data.pkl', 'rb') as file:
     hrtf_data_loaded = pickle.load(file)
 
 class VirEnvScreen:
-    def __init__(self, screen, room_name, avatar_image, username):
+    def __init__(self, screen, room_name, avatar_image, username,session_id):
         self.screen = screen
         self.room_name = room_name
         self.username = username
-        # Update paths to use os.path.join for better compatibility
+        self.session_id=session_id
         self.background_image_path = os.path.join('assets', 'images', 'background', 'map.png')
         self.speaker_image_path = os.path.join('assets', 'images', 'speaker', 'boombox.png')
         self.avatar_image_path = os.path.join('assets', 'images', 'avatars', avatar_image + '.png')
@@ -41,13 +41,13 @@ class VirEnvScreen:
         self.background_image = pygame.image.load(self.background_image_path).convert()
         self.speaker_image = pygame.image.load(self.speaker_image_path).convert_alpha()
         self.avatar_image = pygame.image.load(self.avatar_image_path).convert_alpha()
-
         self.font = pygame.font.Font(None, 36)
         self.user_pos = [screen.get_width() // 2, screen.get_height() // 2]
         self.speaker_pos = [screen.get_width() // 3, screen.get_height() // 3]
-        
+        self.other_users = {}
+        self.avatar_cache = {}
         self.audio_playing = False
-        self.audio_thread = None        # Assume hrtf_data_loaded is available
+        self.audio_thread = None
         # You might need to pass it as a parameter if it's used in methods like play_audio
     def handle_event(self, event):
         # Handling KEYDOWN events to start movement
@@ -90,28 +90,59 @@ class VirEnvScreen:
             self.user_pos[1] += 0.6
         # Update anything that needs refreshing
         pass
+
+    def update_other_user_positions(self, username, position, avatar_image_path):
+        full_avatar_image_path = os.path.join('assets', 'images', 'avatars', avatar_image_path + '.png')
+
+        try:
+            if username in self.other_users:
+                self.other_users[username]['position'] = position
+
+                if self.other_users[username]['avatar_image_path'] != full_avatar_image_path:
+                    self.other_users[username]['avatar_surface'] = pygame.image.load(full_avatar_image_path).convert_alpha()
+                    self.other_users[username]['avatar_image_path'] = full_avatar_image_path
+            else:
+                self.other_users[username] = {
+                    'position': position,
+                    'avatar_image_path': full_avatar_image_path,
+                    'avatar_surface': pygame.image.load(full_avatar_image_path).convert_alpha()
+                }
+        except pygame.error as e:
+            print(f"Error loading avatar image for {username} at path {full_avatar_image_path}: {e}")
+        except Exception as e:
+            print(f"Unexpected error when updating position for {username}: {e}")
+
+
     def draw(self):
-        # Draw the virtual environment background
-        self.screen.blit(self.background_image, (0, 0))
+        try:
+            # Draw the virtual environment background
+            self.screen.blit(self.background_image, (0, 0))
 
-        # Draw the room name at the top
-        room_name_surf = self.font.render(f"Room: {self.room_name}", True, pygame.Color('black'))
-        room_name_rect = room_name_surf.get_rect(center=(self.screen.get_width() // 2, 20))
-        self.screen.blit(room_name_surf, room_name_rect)
+            # Draw the room name at the top
+            room_name_surf = self.font.render(f"Room: {self.room_name}", True, pygame.Color('black'))
+            room_name_rect = room_name_surf.get_rect(center=(self.screen.get_width() // 2, 20))
+            self.screen.blit(room_name_surf, room_name_rect)
 
-        # Draw the speaker
-        speaker_rect = self.speaker_image.get_rect(center=self.speaker_pos)
-        self.screen.blit(self.speaker_image, speaker_rect)
+            # Draw the speaker
+            speaker_rect = self.speaker_image.get_rect(center=self.speaker_pos)
+            self.screen.blit(self.speaker_image, speaker_rect)
 
-        # Draw the avatar
-        avatar_rect = self.avatar_image.get_rect(center=self.user_pos)
-        self.screen.blit(self.avatar_image, avatar_rect)
+            # Draw each avatar and username
+            for user_info in self.other_users.values():
+                self.screen.blit(user_info['avatar_surface'], user_info['position'])
 
-        # Draw the username above the avatar
-        username_surf = self.font.render(self.username, True, pygame.Color('black'))
-        username_rect = username_surf.get_rect(center=(avatar_rect.centerx, avatar_rect.top - 20))
-        self.screen.blit(username_surf, username_rect)
-        
+            # Draw the current user's avatar and username
+            avatar_rect = self.avatar_image.get_rect(center=self.user_pos)
+            self.screen.blit(self.avatar_image, avatar_rect)
+            username_surf = self.font.render(self.username, True, pygame.Color('black'))
+            username_rect = username_surf.get_rect(center=(avatar_rect.centerx, avatar_rect.top - 20))
+            self.screen.blit(username_surf, username_rect)
+
+            pygame.display.flip()
+        except Exception as e:
+            print(f"Error during rendering: {e}")
+
+
     def start_audio(self):
         global audio_playing, audio_thread
         if not audio_playing:
@@ -206,6 +237,14 @@ class VirEnvScreen:
         stream.stop_stream()
         stream.close()
         p.terminate()
+
+    def get_user_pos(self):
+        return self.user_pos
+
+    def has_moved(self):
+        # Logic to determine if the user's position has changed.
+        # Could check if any of the movement flags are True or if user_pos is different from last frame.
+        return self.moving_down or self.moving_left or self.moving_right or self.moving_up
 
     def is_done(self):
         # In a real application, you might use this to transition to another state

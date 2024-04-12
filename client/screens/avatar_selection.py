@@ -3,13 +3,14 @@ import pygame
 import os
 SCREEN_WIDTH,SCREEN_HEIGHT=800, 600
 class AvatarSelectionScreen:
-    def __init__(self, screen, room_name, session_id):
+    def __init__(self, screen, room_name, session_id, total_users):
         self.screen = screen
         self.room_name = room_name
         self.font = pygame.font.Font(None, 36)
         self.done = False
         self.active = False
         self.avatars = []
+        self.total_users=total_users
         self.selected_avatar_index = None
         self.user_name=""
         self.session_id=session_id
@@ -72,25 +73,33 @@ class AvatarSelectionScreen:
 
         # Draw the room name
         room_text_surf = self.font.render(f"Room Name: {self.room_name}", True, (0, 0, 0))
-        room_text_rect = room_text_surf.get_rect(center=(SCREEN_WIDTH // 2, 50))
+        room_text_rect = room_text_surf.get_rect(center=(400, 50))
         self.screen.blit(room_text_surf, room_text_rect)
+
+        # Draw the number of users in the room
+        users_text_surf = self.font.render(f"Users: {self.total_users}", True, (0, 0, 0))
+        users_text_rect = users_text_surf.get_rect(center=(400, 100))
+        self.screen.blit(users_text_surf, users_text_rect)
 
         # Draw avatars and highlight the selected one
         for idx, (avatar_img, avatar_rect, _) in enumerate(self.avatars):
             self.screen.blit(avatar_img, avatar_rect)
             if idx == self.selected_avatar_index:
-                # Draw a rectangle around the selected avatar
-                pygame.draw.rect(self.screen, (0, 255, 0), avatar_rect, 2)
+                pygame.draw.rect(self.screen, (0, 255, 0), avatar_rect, 2)  # Highlight selected avatar
 
         # Draw the user_name input box
         input_box_color = self.color_active if self.active else self.color_inactive
         pygame.draw.rect(self.screen, input_box_color, self.user_name_input_box, 2)
         user_name_surf = self.font.render(self.user_name, True, (0, 0, 0))
-        self.screen.blit(user_name_surf, (self.user_name_input_box.x + 5, self.user_name_input_box.y + 5))        
+        self.screen.blit(user_name_surf, (self.user_name_input_box.x + 5, self.user_name_input_box.y + 5))
+        
+        # Draw the enter button
         pygame.draw.rect(self.screen, (100, 100, 255), self.enter_button)
         enter_text_surface = self.button_font.render(self.button_text, True, (255, 255, 255))
         enter_text_rect = enter_text_surface.get_rect(center=self.enter_button.center)
         self.screen.blit(enter_text_surface, enter_text_rect)
+
+        pygame.display.flip()
     def update(self):
         # Update logic for avatar selection could go here
         pass
@@ -111,6 +120,7 @@ class AvatarSelectionScreen:
         if avatar_id in self.avatars:
             self.selected_avatar_id = avatar_id
 
-
+    def get_total_users(self):
+        return self.total_users
     def get_user_name(self):
         return self.user_name
