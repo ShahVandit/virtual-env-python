@@ -7,6 +7,8 @@ from screens.avatar_selection import AvatarSelectionScreen
 from screens.virtual_environment import VirEnvScreen
 from threading import Thread
 import aiohttp
+import pyaudio
+import numpy as np
 
 # Initialize Pygame and Socket.IO client
 pygame.init()
@@ -17,13 +19,7 @@ room_entry_screen = RoomEntryScreen(screen)
 avatar_selection_screen = None
 vir_env_screen = None
 current_screen = room_entry_screen
-sio = socketio.AsyncClient()
-
-# @sio.event
-# async def room_update():
-#     print("Connected to the server.")
-# Globals for communication between threads
-# room_joined = False
+sio = socketio.AsyncClient(logger=True, engineio_logger=True)
 
 async def join_room_async(room_name):
     await sio.connect('http://localhost:5000')
@@ -54,12 +50,12 @@ async def send_position(data):
     username = data['username']
     position = data['position']
     avatar_image_path = data['avatar_image_path']
-    print(f"postion {position} received from {username}")
     current_screen.update_other_user_positions(username, position, avatar_image_path)
 
 async def avatar_selection_async(room_name, username, avatar_image_path, session_id):
     try:
-        # await sio.connect('http://localhost:5000')
+        if not sio.connected:
+            await sio.connect('http://localhost:5000')
         data = {
             'room_name': room_name,
             'username': username,
@@ -79,7 +75,59 @@ def on_avatar_selection_response(result):
     total_users=result['total_users']
     avatar_image_path=result['avatar_image_path']
     global current_screen
-    current_screen = VirEnvScreen(screen, room_name, avatar_image_path, username,session_id)
+    loop = asyncio.get_event_loop()
+    loop.create_task(sio.emit('get_players', {'room_name': room_name}))
+    p = pyaudio.PyAudio()
+    try:
+        stream = p.open(format=pyaudio.paInt16,
+                        channels=2,
+                        rate=44100,
+                        output=True)
+    except Exception as e:
+        print('csds ',e)
+    current_screen = VirEnvScreen(screen, room_name, avatar_image_path, username,session_id, loop, stream, p)
+    asyncio.run_coroutine_threadsafe(sio.emit('send_audio_status', {'room_name':room_name}),loop)
+
+@sio.event
+def audio_status(data):
+    global current_screen
+    try:
+        current_screen.uni_audio_playing = data['is_playing']
+        current_screen.music_played_by=data['played_by']
+        print('x button pressed ',current_screen.uni_audio_playing, current_screen.music_played_by)
+    except Exception as e:
+        print('exception at x',e)
+
+@sio.event
+def get_audio_chunk(data):
+    try:
+        audio_int16 = np.frombuffer(data['chunk'], dtype=np.int16)
+        try:
+            audio_int16 = audio_int16.reshape(-1, 2)
+        except ValueError:
+            # Handle the case where the number of samples isn't divisible evenly by the number of channels
+            raise ValueError("The byte data does not fit into an even number of frames for {} channels.".format(2))
+        audio_float64 = audio_int16.astype(np.float64) / 32768.0
+        current_screen.handle_audio_chunk(current_screen.stream, audio_float64)
+    except Exception as e:
+        print('exception from chunk sending, ',e)
+
+@sio.event
+def receive_audio_status(data):
+    global current_screen
+    current_screen.uni_audio_playing=data['is_playing']
+    current_screen.music_played_by=data['played_by']
+    print('on page open ',current_screen.uni_audio_playing, current_screen.music_played_by)
+
+@sio.event
+def handle_get_players(data):
+    global current_screen
+    if isinstance(current_screen, VirEnvScreen):
+        for player_info in data['players']:
+            current_screen.update_other_user_positions(player_info['username'], player_info['position'], player_info['avatar_image_path'])
+        
+        # Now that all players are updated, we can draw the screen
+        current_screen.draw()
 
 @sio.event
 def avatar_update(data):
@@ -108,6 +156,8 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             else:
+                if current_screen==vir_env_screen:
+                    print('shdfs')
                 current_screen.handle_event(event)
         
         # Check if it's time to join a room based on your application's logic
